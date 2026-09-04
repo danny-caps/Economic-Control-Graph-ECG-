@@ -276,11 +276,11 @@ export default function App() {
                     </div>
                     <h3 style={{ fontSize: '16px', color: '#f8fafc', fontWeight: 700, lineHeight: 1.4 }}>
                       {viewMode === 'executive'
-                        ? '3 coordinated merchant rings are currently transacting under individual ₹50,000 limits to siphon funds to a common vault.'
-                        : 'ECG has isolated 3 high-probability Common-Control subgraphs (Pcc ≥ 70%) evading entity-level threshold filters.'}
+                        ? `${metrics.high_risk_clusters_count || 3} coordinated merchant rings are currently transacting under individual ₹50,000 limits to siphon funds to a common vault.`
+                        : `ECG has isolated ${metrics.high_risk_clusters_count || 3} high-probability Common-Control subgraphs (Pcc ≥ 70%) evading entity-level threshold filters.`}
                     </h3>
                     <p style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>
-                      💡 <strong>Financial Impact:</strong> ₹3.95 Cr at immediate settlement risk. Recommended mitigation (Velocity Throttling) preserves <strong>+₹3.10 Cr</strong> while avoiding ₹44.30 L in false-alarm merchant friction.
+                      💡 <strong>Financial Impact:</strong> {metrics.correlated_exposure_formatted || '₹3.95 Cr'} at immediate settlement risk. Recommended mitigation (Velocity Throttling) preserves <strong>+{metrics.early_warning_capital_protected || '₹3.10 Cr'}</strong> while avoiding {metrics.false_positive_cost_avoided_formatted || '₹44.30 L'} in false-alarm merchant friction.
                     </p>
                   </div>
 
