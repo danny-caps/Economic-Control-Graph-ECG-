@@ -1,0 +1,161 @@
+{
+  "run_metadata": {
+    "run_id": "ecg-benchmark-2026-09-02_024616",
+    "run_timestamp": "2026-09-02_024616",
+    "dataset_version": "synthetic-ecg-v1.0",
+    "seed": 42,
+    "model_version": "ecg-v1.4-buildathon",
+    "feature_schema_version": "ecg-features-2026.1",
+    "trained_at": "2026-09-02T02:46:17.247761",
+    "train_window": "T0->T1 (first 45 days)",
+    "test_window": "T1->T2 (days 46-90, held-out)",
+    "pcc_decision_threshold": 0.7,
+    "elapsed_seconds": 2.9
+  },
+  "dataset_summary": {
+    "total_transactions": 2561,
+    "train_transactions": 1422,
+    "test_transactions": 1139,
+    "total_clusters_detected": 8,
+    "known_fraud_rings": 1,
+    "evasion_clusters": 6,
+    "legitimate_dense_clusters": 3
+  },
+  "confusion_matrix_ecg": {
+    "true_positives": 3,
+    "false_positives": 0,
+    "false_negatives": 0,
+    "true_negatives": 5
+  },
+  "baseline_comparison": {
+    "conventional_rulebook": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "false_positive_count": 0,
+      "fp_economic_cost_inr": 4850000.0,
+      "fp_economic_cost_formatted": "\u20b948.50 L",
+      "exposure_at_detection_inr": 38000000.0,
+      "exposure_at_detection_formatted": "\u20b93.80 Cr",
+      "detection_latency_hours": 72.0
+    },
+    "account_level_xgboost": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "false_positive_count": 0,
+      "fp_economic_cost_inr": 2900000.0,
+      "fp_economic_cost_formatted": "\u20b929.00 L",
+      "exposure_at_detection_inr": 32000000.0,
+      "exposure_at_detection_formatted": "\u20b93.20 Cr",
+      "detection_latency_hours": 48.5
+    },
+    "basic_graph_unweighted": {
+      "precision": 37.5,
+      "recall": 100.0,
+      "f1_score": 54.5,
+      "false_positive_count": 5,
+      "fp_economic_cost_inr": 6200000.0,
+      "fp_economic_cost_formatted": "\u20b962.00 L",
+      "exposure_at_detection_inr": 21000000.0,
+      "exposure_at_detection_formatted": "\u20b92.10 Cr",
+      "detection_latency_hours": 24.0
+    },
+    "ecg_full_engine": {
+      "precision": 100.0,
+      "recall": 100.0,
+      "f1_score": 100.0,
+      "false_positive_count": 0,
+      "fp_economic_cost_inr": 0.0,
+      "fp_economic_cost_formatted": "\u20b90.00",
+      "exposure_at_detection_inr": 7000000.0,
+      "exposure_at_detection_formatted": "\u20b970.00 L",
+      "detection_latency_hours": 5.2
+    }
+  },
+  "signal_ablation": {
+    "full_ecg_engine": {
+      "precision": 100.0,
+      "recall": 100.0,
+      "f1_score": 100.0,
+      "delta_f1": "Baseline"
+    },
+    "ecg_minus_ip_signals": {
+      "precision": 100.0,
+      "recall": 100.0,
+      "f1_score": 100.0,
+      "delta_f1": "0.0%"
+    },
+    "ecg_minus_device_signals": {
+      "precision": 75.0,
+      "recall": 100.0,
+      "f1_score": 85.7,
+      "delta_f1": "-14.3%"
+    },
+    "ecg_minus_temporal_sync": {
+      "precision": 100.0,
+      "recall": 100.0,
+      "f1_score": 100.0,
+      "delta_f1": "0.0%"
+    },
+    "ecg_minus_beneficiary_conv": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "delta_f1": "-100.0%"
+    },
+    "ecg_minus_multihop_paths": {
+      "precision": 100.0,
+      "recall": 100.0,
+      "f1_score": 100.0,
+      "delta_f1": "0.0%"
+    }
+  },
+  "adversarial_evasion_recall": {
+    "1": 100.0,
+    "2": 100.0,
+    "3": 100.0,
+    "4": 100.0,
+    "5": 100.0,
+    "6": 100.0
+  },
+  "false_positive_immunity": {
+    "total_legit_dense_clusters": 3,
+    "correctly_identified_legit": 3,
+    "fp_immunity_rate_pct": 100.0,
+    "legit_cluster_results": [
+      {
+        "cluster_id": "cluster_legit_payroll_tata",
+        "matched_ecg_cluster": "cluster_1002",
+        "pcc": 0.029,
+        "pcc_percentage": "2.9%",
+        "verdict": "PASS (Legitimate)",
+        "correctly_identified_legit": true
+      },
+      {
+        "cluster_id": "cluster_legit_campus_iit",
+        "matched_ecg_cluster": "cluster_1001",
+        "pcc": 0.197,
+        "pcc_percentage": "19.7%",
+        "verdict": "PASS (Legitimate)",
+        "correctly_identified_legit": true
+      },
+      {
+        "cluster_id": "cluster_legit_apartment_complex",
+        "matched_ecg_cluster": "cluster_1001",
+        "pcc": 0.197,
+        "pcc_percentage": "19.7%",
+        "verdict": "PASS (Legitimate)",
+        "correctly_identified_legit": true
+      }
+    ]
+  },
+  "early_warning_economics": {
+    "ecg_exposure_at_detection_inr": 7000000.0,
+    "baseline_exposure_at_detection_inr": 38000000.0,
+    "early_warning_capital_saved_inr": 31000000.0,
+    "early_warning_capital_saved_formatted": "\u20b93.10 Cr",
+    "f1_gain_over_account_ml_pct": 100.0,
+    "fp_cost_reduction_vs_graph_pct": 100.0
+  }
+}
