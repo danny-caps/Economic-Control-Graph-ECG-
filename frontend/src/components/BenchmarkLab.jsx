@@ -1,15 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { 
   BarChart3, ShieldAlert, Cpu, CheckCircle2, AlertTriangle, 
-  TrendingUp, Award, Layers, Target, FileSpreadsheet 
+  TrendingUp, Award, Layers, Target, FileSpreadsheet, Upload, Network 
 } from 'lucide-react';
+import EllipticVisualizer from './EllipticVisualizer';
 
 export default function BenchmarkLab() {
   const [benchmarks, setBenchmarks] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('baselines');
 
+  // States for Elliptic Batch Testing
+  const [nodesFile, setNodesFile] = useState(null);
+  const [edgesFile, setEdgesFile] = useState(null);
+  const [ellipticMetrics, setEllipticMetrics] = useState({});
+  const [graphData, setGraphData] = useState(null);
+  const [analyzingBatch, setAnalyzingBatch] = useState(false);
+
   useEffect(() => {
+    // Fetch original system benchmarks
     fetch('/api/benchmarks')
       .then(res => res.json())
       .then(data => {
@@ -20,7 +29,32 @@ export default function BenchmarkLab() {
         console.error("Failed to load benchmarks", err);
         setLoading(false);
       });
+
+    // Fetch Elliptic test-set metrics from metrics.json endpoint
+    fetch('/api/elliptic-metrics')
+      .then(res => res.json())
+      .then(data => setEllipticMetrics(data))
+      .catch(err => console.error("Elliptic metrics load failed", err));
   }, []);
+
+  const handleAnalyzeBatch = async () => {
+    if (!nodesFile || !edgesFile) return alert("Please upload both Nodes and Edges CSV files.");
+    
+    setAnalyzingBatch(true);
+    const formData = new FormData();
+    formData.append("nodes_file", nodesFile);
+    formData.append("edges_file", edgesFile);
+
+    try {
+      const response = await fetch('/api/analyze-elliptic-batch', { method: 'POST', body: formData });
+      const result = await response.json();
+      setGraphData(result);
+    } catch (error) {
+      console.error("Analysis failed", error);
+    } finally {
+      setAnalyzingBatch(false);
+    }
+  };
 
   if (loading || !benchmarks) {
     return (
@@ -71,14 +105,15 @@ export default function BenchmarkLab() {
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Navigation Tabs including the new Batch Lab */}
       <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '10px', overflowX: 'auto' }}>
         {[
           { id: 'baselines', label: '1. Baseline Comparisons (PRD §28)' },
           { id: 'ablation', label: '2. Signal Ablation Testing (PRD §28)' },
           { id: 'evasion', label: '3. Adversarial Evasion Levels 1-6 (PRD §26)' },
           { id: 'fp_tests', label: '4. False-Positive Protection (PRD §31)' },
-          { id: 'external', label: '5. External Benchmark Strategy (IEEE, Elliptic, IBM)' }
+          { id: 'external', label: '5. External Benchmark Strategy (IEEE, Elliptic, IBM)' },
+          { id: 'elliptic_batch', label: '6. Live Batch & Graph Inference' }
         ].map(t => (
           <button
             key={t.id}
@@ -283,6 +318,116 @@ export default function BenchmarkLab() {
           </div>
         </div>
       )}
+
+      {/* Tab 6: Live Batch Inference & Graph Visualizer (Elliptic Dataset Integration) */}
+      {activeTab === 'elliptic_batch' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Global Metrics from metrics.json */}
+          <div className="glass-panel" style={{ padding: '20px' }}>
+            <h3 style={{ fontSize: '16px', color: '#f8fafc', marginBottom: '12px' }}>
+              Saved Test-Set Performance Metrics (<code style={{ fontSize: '12px', color: '#38bdf8' }}>metrics.json</code>)
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+              <div className="glass-panel" style={{ padding: '14px', textAlign: 'center' }}>
+                <div style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>F1 Score</div>
+                <div className="metric-num text-gradient-blue" style={{ fontSize: '20px', marginTop: '4px' }}>
+                  {ellipticMetrics.test_f1 ? (ellipticMetrics.test_f1 * 100).toFixed(2) + '%' : 'N/A'}
+                </div>
+              </div>
+              <div className="glass-panel" style={{ padding: '14px', textAlign: 'center' }}>
+                <div style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>Precision</div>
+                <div className="metric-num" style={{ fontSize: '20px', color: '#34d399', marginTop: '4px' }}>
+                  {ellipticMetrics.test_precision ? (ellipticMetrics.test_precision * 100).toFixed(2) + '%' : 'N/A'}
+                </div>
+              </div>
+              <div className="glass-panel" style={{ padding: '14px', textAlign: 'center' }}>
+                <div style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>Recall</div>
+                <div className="metric-num" style={{ fontSize: '20px', color: '#fb923c', marginTop: '4px' }}>
+                  {ellipticMetrics.test_recall ? (ellipticMetrics.test_recall * 100).toFixed(2) + '%' : 'N/A'}
+                </div>
+              </div>
+              <div className="glass-panel" style={{ padding: '14px', textAlign: 'center' }}>
+                <div style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase' }}>ROC AUC</div>
+                <div className="metric-num" style={{ fontSize: '20px', color: '#38bdf8', marginTop: '4px' }}>
+                  {ellipticMetrics.test_roc_auc ? (ellipticMetrics.test_roc_auc * 100).toFixed(2) + '%' : 'N/A'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Upload Form Box */}
+          <div className="glass-panel" style={{ padding: '20px' }}>
+            <h3 style={{ fontSize: '16px', color: '#f8fafc', marginBottom: '12px' }}>
+              Dynamic Simulation Batch Upload
+            </h3>
+            <p style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '16px' }}>
+              Upload matching Nodes CSV and Edges CSV simulation files (e.g., Batch 1 or Batch 2) to dynamically execute GraphSAGE embeddings and the downstream XGBoost risk model.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxWidth: '500px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', color: '#cbd5e1', marginBottom: '6px' }}>Nodes CSV File:</label>
+                <input 
+                  type="file" 
+                  accept=".csv" 
+                  onChange={(e) => setNodesFile(e.target.files[0])}
+                  style={{ fontSize: '12px', color: '#94a3b8' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', color: '#cbd5e1', marginBottom: '6px' }}>Edges CSV File:</label>
+                <input 
+                  type="file" 
+                  accept=".csv" 
+                  onChange={(e) => setEdgesFile(e.target.files[0])}
+                  style={{ fontSize: '12px', color: '#94a3b8' }}
+                />
+              </div>
+              <button 
+                onClick={handleAnalyzeBatch} 
+                disabled={analyzingBatch}
+                style={{
+                  background: 'var(--accent-blue)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '10px 20px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: analyzingBatch ? 'not-allowed' : 'pointer',
+                  width: 'fit-content',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                <Upload size={16} />
+                {analyzingBatch ? "Executing Pipeline & Graph Inference..." : "Analyze Batch & Run Inference"}
+              </button>
+            </div>
+          </div>
+
+          {/* Render Graph Results */}
+          {graphData && (
+            <div className="glass-panel" style={{ padding: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3 style={{ fontSize: '16px', color: '#f8fafc' }}>
+                  Dynamic Transaction Network Visualization
+                </h3>
+                <span className="badge badge-critical">
+                  High Risk Nodes: {graphData.summary.high_risk_count} / {graphData.summary.node_count}
+                </span>
+              </div>
+              <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '14px' }}>
+                Nodes rendered with high-fidelity glow and k-core structural sizing. Red hexagons indicate high-risk transactions, and blue circles indicate low-risk transactions.
+              </p>
+              <div style={{ height: '600px', border: '1px solid var(--border-subtle)', borderRadius: '10px', overflow: 'hidden', background: '#0a0a0c' }}>
+                <EllipticVisualizer nodes={graphData.nodes} edges={graphData.edges} />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
+
