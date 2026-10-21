@@ -3,12 +3,15 @@ from community import community_louvain
 
 class EllipticTopologyEngine:
     @staticmethod
-    def build_and_analyze(edges_df):
-        G = nx.from_pandas_edgelist(
-            edges_df, 
-            source='txId1', 
-            target='txId2', 
-            create_using=nx.DiGraph()
+    def build_and_analyze(edges_df, node_ids=None):
+        G = nx.DiGraph()
+        if node_ids is not None:
+            G.add_nodes_from(str(node_id) for node_id in node_ids)
+        G.add_edges_from(
+            (str(source), str(target))
+            for source, target in edges_df[["txId1", "txId2"]].itertuples(
+                index=False, name=None
+            )
         )
         G_undirected = G.to_undirected()
         
@@ -22,18 +25,19 @@ class EllipticTopologyEngine:
         G_core.remove_edges_from(nx.selfloop_edges(G_core))
         core_numbers = nx.core_number(G_core)
         
-        try:
-            communities = community_louvain.best_partition(G_undirected)
-            community_sizes = {}
-            for node, comm_id in communities.items():
-                community_sizes[comm_id] = community_sizes.get(comm_id, 0) + 1
-        except Exception:
-            communities = {n: 0 for n in G.nodes()}
-            community_sizes = {0: len(G.nodes())}
+        communities = (
+            community_louvain.best_partition(G_undirected)
+            if G.number_of_nodes()
+            else {}
+        )
+        community_sizes = {}
+        for node, comm_id in communities.items():
+            community_sizes[comm_id] = community_sizes.get(comm_id, 0) + 1
 
         for node in G.nodes():
             G.nodes[node]['wcc_size'] = wcc_map.get(node, 1)
             G.nodes[node]['core_number'] = core_numbers.get(node, 0)
             G.nodes[node]['community_size'] = community_sizes.get(communities.get(node, 0), 1)
+            G.nodes[node]['community_id'] = communities.get(node, 0)
 
         return G

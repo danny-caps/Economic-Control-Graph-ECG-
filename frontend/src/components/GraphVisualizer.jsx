@@ -16,7 +16,7 @@ const NODE_COLORS = {
   Unknown: { background: '#475569', border: '#cbd5e1', highlight: '#f1f5f9' }
 };
 
-export default function GraphVisualizer({ clusterId, onSelectNode }) {
+export default function GraphVisualizer({ clusterId, onSelectNode, providedGraph, title }) {
   const containerRef = useRef(null);
   const networkRef = useRef(null);
   const [graphData, setGraphData] = useState({ nodes: [], edges: [] });
@@ -26,22 +26,33 @@ export default function GraphVisualizer({ clusterId, onSelectNode }) {
   const [timelineStep, setTimelineStep] = useState(100); // 0 to 100%
   const [filterType, setFilterType] = useState('ALL');
   const [physicsEnabled, setPhysicsEnabled] = useState(true);
+  const isDynamicGraph = Boolean(providedGraph);
 
-  // Fetch active graph data from backend
+  // Use analyzed batch data directly; otherwise fetch the synthetic ECG graph.
   useEffect(() => {
+    if (providedGraph) {
+      setGraphData(providedGraph);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     const url = clusterId ? `/api/graph/active?cluster_id=${clusterId}` : `/api/graph/active?limit_nodes=180`;
     fetch(url)
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error(`Graph request failed (${res.status})`);
+        return res.json();
+      })
       .then(data => {
         setGraphData(data);
         setLoading(false);
       })
       .catch(err => {
         console.error("Failed to load graph data", err);
+        setGraphData({ nodes: [], edges: [] });
         setLoading(false);
       });
-  }, [clusterId]);
+  }, [clusterId, providedGraph]);
 
   // Initialize Vis-Network
   useEffect(() => {
@@ -53,16 +64,24 @@ export default function GraphVisualizer({ clusterId, onSelectNode }) {
     const activeNodeIds = new Set(activeRawNodes.map(n => n.id));
 
     const formattedNodes = activeRawNodes
-      .filter(n => filterType === 'ALL' || n.type === filterType)
+      .filter(n => filterType === 'ALL' || (n.type || 'Transaction') === filterType)
       .map(n => {
-        const colors = NODE_COLORS[n.type] || NODE_COLORS.Unknown;
-        const isBeneficiary = n.type === 'Beneficiary';
-        const isAccount = n.type === 'Account';
+        const colors = isDynamicGraph
+          ? n.predicted_class === 1
+            ? { background: '#7f1d1d', border: '#ef4444', highlight: '#fca5a5' }
+            : { background: '#1e3a8a', border: '#3b82f6', highlight: '#93c5fd' }
+          : NODE_COLORS[n.type] || NODE_COLORS.Unknown;
+        const nodeType = n.type || 'Transaction';
+        const isBeneficiary = nodeType === 'Beneficiary';
+        const isAccount = nodeType === 'Account';
         return {
           id: n.id,
-          label: n.label || n.id,
-          shape: isBeneficiary ? 'hexagon' : isAccount ? 'dot' : n.type === 'Device' ? 'box' : 'dot',
-          size: isBeneficiary ? 24 : isAccount ? 18 : 12,
+          label: n.label || String(n.id),
+          title: isDynamicGraph
+            ? `Transaction ${n.txId || n.id}\nPredicted illicit risk: ${(n.risk_score * 100).toFixed(1)}%\nGround truth: ${n.ground_truth_label || 'not supplied'}`
+            : undefined,
+          shape: isBeneficiary ? 'hexagon' : isAccount ? 'dot' : nodeType === 'Device' ? 'box' : 'dot',
+          size: isDynamicGraph ? 12 + (n.core_number || 0) * 1.5 : isBeneficiary ? 24 : isAccount ? 18 : 12,
           color: {
             background: colors.background,
             border: colors.border,
@@ -81,7 +100,7 @@ export default function GraphVisualizer({ clusterId, onSelectNode }) {
             color: isBeneficiary ? 'rgba(239, 68, 68, 0.4)' : 'rgba(51, 149, 255, 0.3)',
             size: 10
           },
-          rawData: n
+          rawData: { ...n, type: nodeType }
         };
       });
 
@@ -174,7 +193,7 @@ export default function GraphVisualizer({ clusterId, onSelectNode }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div className="pulse-dot pulse-blue"></div>
           <span style={{ fontSize: '14px', fontWeight: 600, letterSpacing: '-0.01em' }}>
-            {clusterId ? `Economic Control Subgraph: ${clusterId}` : 'Global Attributed Economic Control Graph'}
+            {title || (clusterId ? `Economic Control Subgraph: ${clusterId}` : 'Global Attributed Economic Control Graph')}
           </span>
           <span className="badge badge-blue">
             {graphData.nodes.length} Nodes • {graphData.edges.length} Edges
@@ -183,7 +202,7 @@ export default function GraphVisualizer({ clusterId, onSelectNode }) {
 
         {/* Node Type Filter Buttons */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}>
-          {['ALL', 'Account', 'Beneficiary', 'Device', 'IP', 'Merchant'].map(t => (
+          {['ALL', ...(isDynamicGraph ? ['Transaction'] : ['Account', 'Beneficiary', 'Device', 'IP', 'Merchant'])].map(t => (
             <button
               key={t}
               onClick={() => setFilterType(t)}
@@ -239,16 +258,32 @@ export default function GraphVisualizer({ clusterId, onSelectNode }) {
 
         {/* Floating Legend */}
         <div style={{ position: 'absolute', bottom: '65px', left: '16px', background: 'rgba(10, 15, 26, 0.88)', backdropFilter: 'blur(8px)', border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '10px 14px', fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '6px', zIndex: 5 }}>
-          <div style={{ fontWeight: 600, color: '#e2e8f0', marginBottom: '2px' }}>Graph Entities & Edges</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 14px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#1d4ed8', border: '1px solid #60a5fa' }} /> Account</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '9px', height: '9px', borderRadius: '2px', background: '#b91c1c', border: '1px solid #f87171' }} /> Cashout Vault</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '9px', height: '9px', borderRadius: '2px', background: '#b45309' }} /> Shared Device</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#6d28d9' }} /> Network IP</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '12px', height: '2px', background: '#38bdf8' }} /> Strong Link</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '12px', height: '1px', background: '#94a3b8', borderStyle: 'dashed' }} /> Discounted Link</div>
+          <div style={{ fontWeight: 600, color: '#e2e8f0', marginBottom: '2px' }}>
+            {isDynamicGraph ? 'Predicted transaction risk' : 'Graph Entities & Edges'}
           </div>
+          {isDynamicGraph ? (
+            <div style={{ display: 'grid', gap: '6px' }}>
+              <div><span style={{ color: '#f87171' }}>●</span> Predicted illicit</div>
+              <div><span style={{ color: '#60a5fa' }}>●</span> Predicted licit</div>
+              <div style={{ color: '#94a3b8' }}>Ground truth is shown separately in each node tooltip.</div>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#1d4ed8', border: '1px solid #60a5fa' }} /> Account</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '9px', height: '9px', borderRadius: '2px', background: '#b91c1c', border: '1px solid #f87171' }} /> Cashout Vault</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '9px', height: '9px', borderRadius: '2px', background: '#b45309' }} /> Shared Device</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#6d28d9' }} /> Network IP</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '12px', height: '2px', background: '#38bdf8' }} /> Strong Link</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ width: '12px', height: '1px', background: '#94a3b8', borderStyle: 'dashed' }} /> Discounted Link</div>
+            </div>
+          )}
         </div>
+
+        {!loading && graphData.nodes.length === 0 && (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', pointerEvents: 'none' }}>
+            {isDynamicGraph ? 'Analyze a nodes and edges CSV pair to render its graph.' : 'No graph data is available.'}
+          </div>
+        )}
 
         {/* Selected Entity Card Modal */}
         {selectedEntity && (
@@ -275,6 +310,24 @@ export default function GraphVisualizer({ clusterId, onSelectNode }) {
                   <span>Entity Name:</span>
                   <span style={{ color: '#f1f5f9' }}>{selectedEntity.name}</span>
                 </div>
+              )}
+              {selectedEntity.risk_score !== undefined && (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Predicted illicit risk:</span>
+                    <span style={{ color: selectedEntity.predicted_class === 1 ? '#f87171' : '#60a5fa' }}>
+                      {(selectedEntity.risk_score * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Ground truth:</span>
+                    <span>{selectedEntity.ground_truth_label || 'Not supplied'}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>k-core / component:</span>
+                    <span>{selectedEntity.core_number} / {selectedEntity.wcc_size}</span>
+                  </div>
+                </>
               )}
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span>Provenance:</span>
@@ -306,7 +359,9 @@ export default function GraphVisualizer({ clusterId, onSelectNode }) {
         </button>
 
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontSize: '11px', color: '#94a3b8', fontFamily: 'JetBrains Mono' }}>T0 (Day 1)</span>
+          <span style={{ fontSize: '11px', color: '#94a3b8', fontFamily: 'JetBrains Mono' }}>
+            {isDynamicGraph ? 'CSV order (10%)' : 'T0 (Day 1)'}
+          </span>
           <input
             type="range"
             min="10"
@@ -316,7 +371,7 @@ export default function GraphVisualizer({ clusterId, onSelectNode }) {
             style={{ flex: 1, accentColor: '#3395FF', cursor: 'pointer' }}
           />
           <span style={{ fontSize: '11px', color: '#60a5fa', fontFamily: 'JetBrains Mono', fontWeight: 600 }}>
-            T2 (Day 90: {timelineStep}%)
+            {isDynamicGraph ? `CSV order (${timelineStep}%)` : `T2 (Day 90: ${timelineStep}%)`}
           </span>
         </div>
       </div>

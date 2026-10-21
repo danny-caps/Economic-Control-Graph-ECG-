@@ -5,12 +5,14 @@ Razorpay AI Risk Manager — Track 02 MVP
 """
 
 import io
+import logging
 import os
 import pandas as pd
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, List, Any, Optional
 
-from fastapi import FastAPI, HTTPException, Query, Body, UploadFile, File
+from fastapi import FastAPI, HTTPException, Query, Body, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from fastapi.staticfiles import StaticFiles
@@ -26,8 +28,11 @@ from .ai_reasoner import AIRiskReasoner
 from .benchmark import ECGBenchmarkEngine
 
 # --- NEW: Elliptic Dataset Imports ---
-from .elliptic_models import EllipticModelManager
-from .elliptic_graph import EllipticTopologyEngine
+from .elliptic_models import (
+    ArtifactError,
+    BatchValidationError,
+    EllipticModelManager,
+)
 
 app = FastAPI(
     title="Economic Control Graph (ECG) Risk Engine",
@@ -54,7 +59,14 @@ ai_reasoner = AIRiskReasoner()
 benchmark_engine = ECGBenchmarkEngine()
 
 # NEW: Elliptic manager instance (looks in the results folder)
-elliptic_manager = EllipticModelManager(base_path="results")
+artifact_path = Path(
+    os.environ.get(
+        "ECG_ARTIFACTS_DIR",
+        str(Path(__file__).resolve().parents[1] / "artifacts"),
+    )
+)
+elliptic_manager = EllipticModelManager(base_path=artifact_path)
+logger = logging.getLogger(__name__)
 
 # State caches
 app_state = {
@@ -142,10 +154,14 @@ def _initialize_pipeline():
 # Initial startup run for synthetic data
 _initialize_pipeline()
 
-# NEW: Startup event to load Elliptic artifacts asynchronously
+# Load the separately trained Elliptic artifacts once at backend startup.
 @app.on_event("startup")
 async def startup_event():
-    elliptic_manager.load_artifacts()
+    try:
+        elliptic_manager.load_artifacts()
+    except ArtifactError as error:
+        elliptic_manager.artifact_error = str(error)
+        logger.error("Elliptic inference is unavailable: %s", error)
 
 # --- EXISTING ENDPOINTS ---
 
@@ -157,7 +173,12 @@ def get_health():
         "initialized": app_state["is_initialized"],
         "nodes": graph_engine.graph.number_of_nodes(),
         "edges": graph_engine.graph.number_of_edges(),
-        "total_transactions": len(app_state["transactions"])
+        "total_transactions": len(app_state["transactions"]),
+        "elliptic_artifacts": {
+            "loaded": elliptic_manager.is_ready,
+            "directory": str(artifact_path),
+            "error": elliptic_manager.artifact_error,
+        },
     }
 
 @app.post("/api/generate-data")
@@ -382,47 +403,91 @@ def get_demo_scenes():
 
 # --- NEW: ELLIPTIC DATASET ENDPOINTS ---
 
-@app.get("/api/elliptic-metrics")
+@app.get("/api/metrics")
+@app.get("/api/elliptic-metrics", include_in_schema=False)
 def get_elliptic_metrics():
-    """Returns the benchmark metrics from the offline Kaggle training"""
-    return elliptic_manager.metrics
+    """Return the saved offline test-set metrics, not current-batch metrics."""
+    if elliptic_manager.metrics is None:
+        raise HTTPException(
+            status_code=503,
+            detail=elliptic_manager.artifact_error
+            or "Saved Elliptic model metrics are not loaded.",
+        )
+    return {
+        "source": "saved Elliptic test-set results",
+        "positive_class": "illicit (class 1)",
+        "metrics": elliptic_manager.metrics,
+    }
 
-@app.post("/api/analyze-elliptic-batch")
+async def _analyze_uploaded_batch(nodes_file, edges_file, batch_name):
+    if not elliptic_manager.is_ready:
+        raise HTTPException(
+            status_code=503,
+            detail=elliptic_manager.artifact_error
+            or "Elliptic model artifacts are not loaded.",
+        )
+    try:
+        nodes_content = await nodes_file.read()
+        edges_content = await edges_file.read()
+        nodes_df = pd.read_csv(
+            io.BytesIO(nodes_content),
+            dtype={"txId": "string"},
+        )
+        edges_df = pd.read_csv(
+            io.BytesIO(edges_content),
+            dtype={"txId1": "string", "txId2": "string"},
+        )
+        return elliptic_manager.analyze_batch(nodes_df, edges_df, batch_name)
+    except BatchValidationError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except pd.errors.EmptyDataError as error:
+        raise HTTPException(
+            status_code=422,
+            detail="Uploaded CSV is empty or has no header row.",
+        ) from error
+    except ArtifactError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except (UnicodeDecodeError, pd.errors.ParserError) as error:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Could not parse uploaded CSV: {error}",
+        ) from error
+
+
+@app.post("/api/analyze-batch")
+@app.post("/api/analyze-elliptic-batch", include_in_schema=False)
 async def analyze_elliptic_batch(
     nodes_file: UploadFile = File(...),
-    edges_file: UploadFile = File(...)
+    edges_file: UploadFile = File(...),
+    batch_name: str = Form("Uploaded batch"),
 ):
-    """Processes dynamic transaction batches using the Elliptic GraphSAGE + XGBoost pipeline"""
-    nodes_df = pd.read_csv(io.StringIO(str(await nodes_file.read(), 'utf-8')))
-    edges_df = pd.read_csv(io.StringIO(str(await edges_file.read(), 'utf-8')))
-    
-    # Analyze topology
-    graph = EllipticTopologyEngine.build_and_analyze(edges_df)
-    
-    # Run Inference
-    predictions = elliptic_manager.predict_batch(nodes_df, graph)
-    
-    nodes_payload = []
-    for pred in predictions:
-        tx_id = pred['txId']
-        nodes_payload.append({
-            "id": tx_id,
-            "risk_score": pred['risk_score'],
-            "predicted_class": pred['predicted_class'],
-            "core_number": graph.nodes[tx_id].get('core_number', 0) if tx_id in graph else 0,
-        })
-        
-    edges_payload = [{"source": row['txId1'], "target": row['txId2']} for _, row in edges_df.iterrows()]
-    
+    """Analyze one nodes/edges pair using the trained transaction-risk model."""
+    return await _analyze_uploaded_batch(nodes_file, edges_file, batch_name)
+
+
+@app.post("/api/evaluate-dataset")
+async def evaluate_elliptic_dataset(
+    nodes_file: UploadFile = File(...),
+    edges_file: UploadFile = File(...),
+    batch_name: str = Form("Evaluation batch"),
+):
+    """Analyze a batch and report fresh metrics only when known labels are present."""
+    result = await _analyze_uploaded_batch(nodes_file, edges_file, batch_name)
     return {
-        "nodes": nodes_payload,
-        "edges": edges_payload,
-        "summary": {
-            "node_count": len(nodes_payload),
-            "edge_count": len(edges_payload),
-            "high_risk_count": sum(1 for p in predictions if p['predicted_class'] == 1)
-        }
+        "batch_id": result["batch_id"],
+        "batch_name": result["batch_name"],
+        "evaluation": result["evaluation"],
     }
+
+
+@app.get("/api/batch/{batch_id}")
+def get_analyzed_batch(batch_id: str):
+    try:
+        return elliptic_manager.get_batch(batch_id)
+    except ArtifactError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
 
 # --- STATIC FILE MOUNTING ---
 frontend_dist = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "frontend", "dist")

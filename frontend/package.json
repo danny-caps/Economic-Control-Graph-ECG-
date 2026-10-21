@@ -14,7 +14,10 @@
     "lucide-react": "^1.35.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "vis-network": "^10.1.2"
+    "react-force-graph-2d": "^1.29.2",
+    "vis-data": "^8.0.5",
+    "vis-network": "^10.1.2",
+    "vis-util": "^6.0.2"
   },
   "devDependencies": {
     "@types/react": "^19.2.18",

@@ -124,6 +124,52 @@ npm run dev
 ```
 Open **`http://localhost:5173`**.
 
+### Dynamic Elliptic batch testing
+
+The **Batch Testing** tab accepts one transaction Nodes CSV and its matching
+Edges CSV. Configure the trained artifacts once on the backend; they are not
+uploaded with each test batch:
+
+```text
+backend/artifacts/
+  graphsage.pt
+  pcc_xgb_model.json
+  elliptic_embeddings.csv
+  metrics.json
+```
+
+Set `ECG_ARTIFACTS_DIR` to use a different artifact directory. Install the
+backend dependencies with `pip install -r backend/requirements.txt`. Artifact
+files are excluded from Git because the embedding index is large and models
+should be managed as deployment assets.
+
+The Nodes CSV must contain unique `txId` values and numeric `feat_2` through
+`feat_166` columns. It may also contain `class` and `timestep`. The Edges CSV
+must contain `txId1` and `txId2`; these are preserved as directed source and
+target IDs. Every edge endpoint must exist in the corresponding Nodes CSV.
+
+The notebook trained `pcc_xgb_model.json` to predict the Elliptic transaction
+class (illicit = 1, licit = 0); it is **not** a common-control (`Pcc`) model.
+Uploaded graph embeddings are recomputed with the saved GraphSAGE weights so
+they reflect the uploaded edge context. The precomputed embedding CSV is loaded
+and indexed but is not substituted when the original graph context cannot be
+verified. Evaluation metrics are only calculated for known labels; Elliptic
+unknown labels are excluded, and ROC AUC is unavailable for single-class data.
+Financial exposure and common-control scores remain marked as unavailable
+unless their own validated model inputs are configured.
+
+API:
+
+- `GET /api/health` reports whether the four Elliptic artifacts loaded.
+- `GET /api/metrics` returns the saved benchmark test-set metrics.
+- `POST /api/analyze-batch` accepts multipart `nodes_file`, `edges_file`, and
+  optional `batch_name`; it returns transaction predictions, graph structure,
+  and evaluation only when labels are present.
+- `POST /api/evaluate-dataset` analyzes the same multipart pair and returns
+  evaluation status and metrics.
+- `GET /api/batch/{batch_id}` retrieves one of the ten most recent results in
+  the running backend process.
+
 ---
 
 ## 🏆 5-Minute PRD Demo Tour

@@ -11,6 +11,7 @@ import ClusterDeepDive from './components/ClusterDeepDive';
 import CounterfactualPlayground from './components/CounterfactualPlayground';
 import InvestigatorCopilot from './components/InvestigatorCopilot';
 import BenchmarkLab from './components/BenchmarkLab';
+import BatchAnalysis from './components/BatchAnalysis';
 import DemoNarrativeModal from './components/DemoNarrativeModal';
 import ExecutiveSummaryModal from './components/ExecutiveSummaryModal';
 
@@ -207,6 +208,7 @@ export default function App() {
           {[
             { id: 'overview', label: viewMode === 'executive' ? '🏢 Executive Risk Dashboard' : '🏢 CRO Portfolio Overview', icon: Activity },
             { id: 'graph', label: viewMode === 'executive' ? '🕸️ Visual Syndicate Map' : '🕸️ Interactive Control Graph', icon: NetIcon },
+            { id: 'batch', label: '📥 Batch Testing', icon: FileText },
             { id: 'deepdive', label: viewMode === 'executive' ? '🔍 Evidence & Audit Breakdown' : '🔍 Cluster Drilldown & SHAP', icon: Layers },
             { id: 'counterfactual', label: viewMode === 'executive' ? '⚖️ Capital Preservation Simulator' : '⚖️ Counterfactual Simulator', icon: Scale },
             { id: 'copilot', label: viewMode === 'executive' ? '🤖 AI Risk Analyst Assistant' : '🤖 AI Investigator Copilot', icon: Bot },
@@ -478,6 +480,8 @@ export default function App() {
                 />
               </div>
             )}
+
+            {activeTab === 'batch' && <BatchAnalysis />}
 
             {/* View 3: Cluster Deep-Dive & SHAP */}
             {activeTab === 'deepdive' && (
