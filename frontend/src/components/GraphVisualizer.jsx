@@ -4,6 +4,7 @@ import {
   Play, Pause, RotateCcw, ZoomIn, ZoomOut, Maximize2, 
   Layers, ShieldAlert, Cpu, Network as NetIcon, Users, CreditCard 
 } from 'lucide-react';
+import { apiUrl } from '../api';
 
 const NODE_COLORS = {
   Account: { background: '#1d4ed8', border: '#60a5fa', highlight: '#93c5fd' },
@@ -38,7 +39,7 @@ export default function GraphVisualizer({ clusterId, onSelectNode, providedGraph
 
     setLoading(true);
     const url = clusterId ? `/api/graph/active?cluster_id=${clusterId}` : `/api/graph/active?limit_nodes=180`;
-    fetch(url)
+    fetch(apiUrl(url))
       .then(res => {
         if (!res.ok) throw new Error(`Graph request failed (${res.status})`);
         return res.json();

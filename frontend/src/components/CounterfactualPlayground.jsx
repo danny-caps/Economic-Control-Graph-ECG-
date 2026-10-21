@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Sliders, Shield, AlertOctagon, CheckCircle2, TrendingUp, DollarSign, Scale } from 'lucide-react';
+import { apiUrl } from '../api';
 
 export default function CounterfactualPlayground({ initialPcc = 0.942, initialExposure = 42000000 }) {
   const [pcc, setPcc] = useState(initialPcc);
@@ -10,7 +11,7 @@ export default function CounterfactualPlayground({ initialPcc = 0.942, initialEx
 
   const fetchSimulation = () => {
     setLoading(true);
-    fetch('/api/counterfactual', {
+    fetch(apiUrl('/api/counterfactual'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

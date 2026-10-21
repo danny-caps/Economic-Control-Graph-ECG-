@@ -14,6 +14,7 @@ import BenchmarkLab from './components/BenchmarkLab';
 import BatchAnalysis from './components/BatchAnalysis';
 import DemoNarrativeModal from './components/DemoNarrativeModal';
 import ExecutiveSummaryModal from './components/ExecutiveSummaryModal';
+import { apiUrl } from './api';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('overview');
@@ -34,9 +35,9 @@ export default function App() {
     try {
       setLoading(true);
       const [overviewRes, clustersRes, scenesRes] = await Promise.all([
-        fetch('/api/overview').then(r => r.json()),
-        fetch('/api/clusters').then(r => r.json()),
-        fetch('/api/demo/scenes').then(r => r.json())
+        fetch(apiUrl('/api/overview')).then(r => r.json()),
+        fetch(apiUrl('/api/clusters')).then(r => r.json()),
+        fetch(apiUrl('/api/demo/scenes')).then(r => r.json())
       ]);
 
       setOverviewData(overviewRes);
@@ -59,7 +60,7 @@ export default function App() {
   const handleRegenerateData = async () => {
     setIsRegenerating(true);
     try {
-      const res = await fetch('/api/generate-data?num_tx=5000', { method: 'POST' });
+      const res = await fetch(apiUrl('/api/generate-data?num_tx=5000'), { method: 'POST' });
       await res.json();
       await loadData();
     } catch (err) {

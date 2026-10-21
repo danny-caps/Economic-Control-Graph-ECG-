@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Activity, AlertTriangle, BarChart3, FileUp, HelpCircle, Play } from 'lucide-react';
 import GraphVisualizer from './GraphVisualizer';
+import { apiUrl } from '../api';
 
 const EMPTY_GRAPH = { nodes: [], edges: [] };
 const EXPLANATION_ITEMS = [
@@ -67,12 +68,12 @@ export default function BatchAnalysis() {
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      fetch('/api/metrics').then(async response => {
+      fetch(apiUrl('/api/metrics')).then(async response => {
         const body = await response.json();
         if (!response.ok) throw new Error(body.detail || 'Saved metrics are unavailable.');
         return body;
       }),
-      fetch('/api/health').then(response => response.json())
+      fetch(apiUrl('/api/health')).then(response => response.json())
     ])
       .then(([metricsResponse, health]) => {
         if (cancelled) return;
@@ -108,7 +109,7 @@ export default function BatchAnalysis() {
     formData.append('batch_name', batchName.trim() || 'Uploaded batch');
     setLoading(true);
     try {
-      const response = await fetch('/api/analyze-batch', {
+      const response = await fetch(apiUrl('/api/analyze-batch'), {
         method: 'POST',
         body: formData
       });

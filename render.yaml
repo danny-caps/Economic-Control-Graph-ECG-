@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: ecg-backend
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: ECG_ARTIFACTS_DIR
+        value: /tmp/ecg-artifacts
+      - key: ECG_ARTIFACTS_S3_BUCKET
+        sync: false
+      - key: ECG_ARTIFACTS_S3_PREFIX
+        value: elliptic
+      - key: ECG_ARTIFACTS_S3_ENDPOINT_URL
+        sync: false
+      - key: ECG_ARTIFACTS_S3_REGION
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false

@@ -170,39 +170,38 @@ API:
 - `GET /api/batch/{batch_id}` retrieves one of the ten most recent results in
   the running backend process.
 
-### Deploying the frontend and backend to Vercel
+### Deploying the frontend to Vercel and backend to Render
 
-The root `vercel.json` defines two services:
+The Vercel project builds only the Vite `frontend` service. The FastAPI service
+runs as a Docker web service on Render because the PyTorch/Torch Geometric
+backend exceeds Vercel's 500 MB serverless function bundle limit.
 
-- `frontend` builds the Vite app from `frontend/` and receives public traffic
-  for `/` and all non-API paths.
-- `backend` runs the FastAPI app from `backend/` and receives public traffic
-  only for `/api/*`.
+1. Create a private S3-compatible bucket and upload the four model artifacts
+   under the `elliptic/` prefix:
+   `graphsage.pt`, `pcc_xgb_model.json`, `elliptic_embeddings.csv`, and
+   `metrics.json`. Give the backend credentials with read-only access to these
+   objects. Do not commit artifacts or credentials to Git.
+2. Create a Render Blueprint from this repository using `render.yaml`. Configure
+   `ECG_ARTIFACTS_S3_BUCKET`, `AWS_ACCESS_KEY_ID`,
+   `AWS_SECRET_ACCESS_KEY`, and `ECG_ARTIFACTS_S3_REGION`. Set
+   `ECG_ARTIFACTS_S3_ENDPOINT_URL` for non-AWS S3-compatible providers; leave it
+   unset for AWS S3. The default object prefix is `elliptic`; update
+   `ECG_ARTIFACTS_S3_PREFIX` if the uploaded objects use another prefix.
+3. The backend downloads all four objects into `ECG_ARTIFACTS_DIR` at startup.
+   Render's configured `/tmp/ecg-artifacts` directory is ephemeral, so every
+   service restart downloads them again.
+4. After Render creates the backend, copy its HTTPS base URL (for example,
+   `https://ecg-backend.onrender.com`) into the Vercel `frontend` service's
+   `VITE_API_BASE_URL` environment variable for Production and Preview, then
+   redeploy the frontend. The browser sends its `/api/...` requests to that
+   backend URL. For local Vite development, leave this variable unset to use
+   the proxy to `127.0.0.1:8000`.
 
-The browser calls relative `/api/...` URLs, so the Vercel rewrites route those
-requests to the backend service on the same deployment domain. There is no
-server-side frontend-to-backend request and therefore no service binding is
-needed. The `127.0.0.1:8000` proxy in `frontend/vite.config.js` is for the
-local Vite development server only; it is not used for production requests.
-
-For local multi-service testing, use the Vercel CLI from the repository root:
-
-```bash
-vercel dev
-```
-
-Elliptic batch inference requires `graphsage.pt`, `pcc_xgb_model.json`,
-`elliptic_embeddings.csv`, and `metrics.json`. These files are intentionally
-excluded from Git, so they must be provisioned for the backend deployment
-separately and `ECG_ARTIFACTS_DIR` configured if they are not placed in the
-backend's default artifact directory. Without them, the general dashboard APIs
-can still serve, but Elliptic metrics and batch inference are unavailable.
-The backend also depends on PyTorch and Torch Geometric, and the local
-embedding CSV is approximately 137 MB. The Vercel service configuration enables
-an attempted deployment, but function packaging/runtime compatibility for
-these dependencies and artifact provisioning have not been verified; a
-successful frontend build alone does not establish that the backend will
-deploy or that batch inference will be available.
+The checked-in Render blueprint uses the free service plan as requested for an
+initial attempt. Free instances can spin down and have limited memory; this
+PyTorch service may fail startup or inference from memory pressure. If that
+happens, use an instance with more memory. A passing frontend build does not
+verify the remote backend runtime or artifact credentials.
 
 ---
 

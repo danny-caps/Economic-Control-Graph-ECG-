@@ -26,6 +26,7 @@ from .exposure_engine import ExposureContagionEngine, format_inr
 from .decision_engine import DecisionEngine
 from .ai_reasoner import AIRiskReasoner
 from .benchmark import ECGBenchmarkEngine
+from .artifact_storage import download_configured_artifacts
 
 # --- NEW: Elliptic Dataset Imports ---
 from .elliptic_models import (
@@ -158,6 +159,7 @@ _initialize_pipeline()
 @app.on_event("startup")
 async def startup_event():
     try:
+        download_configured_artifacts(artifact_path)
         elliptic_manager.load_artifacts()
     except ArtifactError as error:
         elliptic_manager.artifact_error = str(error)

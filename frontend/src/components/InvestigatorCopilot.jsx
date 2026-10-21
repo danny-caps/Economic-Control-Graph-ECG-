@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Bot, Send, Sparkles, User, ShieldCheck, AlertCircle, FileText, CheckCircle } from 'lucide-react';
+import { apiUrl } from '../api';
 
 const SUGGESTED_QUERIES = [
   "Why was this cluster flagged?",
@@ -39,7 +40,7 @@ export default function InvestigatorCopilot({ activeClusterId = "cluster_1001", 
     setLoading(true);
 
     try {
-      const res = await fetch('/api/investigator/chat', {
+      const res = await fetch(apiUrl('/api/investigator/chat'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

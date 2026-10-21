@@ -4,6 +4,7 @@ import {
   TrendingUp, Award, Layers, Target, FileSpreadsheet, Upload, Network 
 } from 'lucide-react';
 import EllipticVisualizer from './EllipticVisualizer';
+import { apiUrl } from '../api';
 
 export default function BenchmarkLab() {
   const [benchmarks, setBenchmarks] = useState(null);
@@ -19,7 +20,7 @@ export default function BenchmarkLab() {
 
   useEffect(() => {
     // Fetch original system benchmarks
-    fetch('/api/benchmarks')
+    fetch(apiUrl('/api/benchmarks'))
       .then(res => res.json())
       .then(data => {
         setBenchmarks(data);
@@ -31,7 +32,7 @@ export default function BenchmarkLab() {
       });
 
     // Fetch Elliptic test-set metrics from metrics.json endpoint
-    fetch('/api/elliptic-metrics')
+    fetch(apiUrl('/api/elliptic-metrics'))
       .then(res => res.json())
       .then(data => setEllipticMetrics(data))
       .catch(err => console.error("Elliptic metrics load failed", err));
@@ -46,7 +47,7 @@ export default function BenchmarkLab() {
     formData.append("edges_file", edgesFile);
 
     try {
-      const response = await fetch('/api/analyze-elliptic-batch', { method: 'POST', body: formData });
+      const response = await fetch(apiUrl('/api/analyze-elliptic-batch'), { method: 'POST', body: formData });
       const result = await response.json();
       setGraphData(result);
     } catch (error) {
@@ -430,4 +431,3 @@ export default function BenchmarkLab() {
     </div>
   );
 }
-
