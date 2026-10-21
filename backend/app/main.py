@@ -1,15 +1,22 @@
+
 """
 FastAPI Server for Economic Control Graph (ECG) & Correlation Risk Engine
 Razorpay AI Risk Manager — Track 02 MVP
 """
 
-from fastapi import FastAPI, HTTPException, Query, Body
+import io
+import os
+import pandas as pd
+from datetime import datetime
+from typing import Dict, List, Any, Optional
+
+from fastapi import FastAPI, HTTPException, Query, Body, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Dict, List, Any, Optional
-from datetime import datetime
-import os
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
+# --- Existing ECG Imports ---
 from .generator import SyntheticDatasetGenerator
 from .graph_engine import EconomicControlGraphEngine
 from .ml_models import ECGModelManager
@@ -18,9 +25,9 @@ from .decision_engine import DecisionEngine
 from .ai_reasoner import AIRiskReasoner
 from .benchmark import ECGBenchmarkEngine
 
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-import os
+# --- NEW: Elliptic Dataset Imports ---
+from .elliptic_models import EllipticModelManager
+from .elliptic_graph import EllipticTopologyEngine
 
 app = FastAPI(
     title="Economic Control Graph (ECG) Risk Engine",
@@ -37,7 +44,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Engine instances in memory
+# --- Engine instances in memory ---
 generator = SyntheticDatasetGenerator(num_normal_tx=1500)
 graph_engine = EconomicControlGraphEngine()
 ml_manager = ECGModelManager()
@@ -45,6 +52,9 @@ exposure_engine = ExposureContagionEngine()
 decision_engine = DecisionEngine()
 ai_reasoner = AIRiskReasoner()
 benchmark_engine = ECGBenchmarkEngine()
+
+# NEW: Elliptic manager instance (looks in the results folder)
+elliptic_manager = EllipticModelManager(base_path="results")
 
 # State caches
 app_state = {
@@ -129,8 +139,15 @@ def _initialize_pipeline():
     }
     app_state["is_initialized"] = True
 
-# Initial startup run
+# Initial startup run for synthetic data
 _initialize_pipeline()
+
+# NEW: Startup event to load Elliptic artifacts asynchronously
+@app.on_event("startup")
+async def startup_event():
+    elliptic_manager.load_artifacts()
+
+# --- EXISTING ENDPOINTS ---
 
 @app.get("/api/health")
 def get_health():
@@ -164,7 +181,6 @@ def get_overview():
 
 @app.get("/api/clusters")
 def get_clusters():
-    """Returns ranked list of candidate & confirmed clusters with full risk decomposition"""
     return {
         "count": len(app_state["clusters_scored"]),
         "clusters": app_state["clusters_scored"]
@@ -182,13 +198,10 @@ def get_active_graph(
     cluster_id: Optional[str] = Query(None),
     limit_nodes: int = Query(250, description="Limit rendered nodes for smooth interactive rendering")
 ):
-    """Returns nodes and edges formatted for Force-Directed / Vis.js visualization"""
     if cluster_id:
-        # Return specific cluster sub-graph
         for cl in app_state["clusters_scored"]:
             if cl["cluster_id"] == cluster_id:
                 sub_nodes = set(cl.get("accounts", []) + cl.get("beneficiaries", []) + cl.get("devices", []) + cl.get("ips", []))
-                # Add immediate connected transaction nodes
                 for u, v, d in graph_engine.undirected_graph.edges(data=True):
                     if u in sub_nodes or v in sub_nodes:
                         sub_nodes.add(u)
@@ -217,7 +230,6 @@ def get_active_graph(
                     })
                 return {"cluster_id": cluster_id, "nodes": nodes, "edges": edges}
 
-    # Otherwise return global interactive sample focusing on clusters + diverse background nodes
     all_nodes = list(graph_engine.undirected_graph.nodes(data=True))[:limit_nodes]
     node_set = {n for n, _ in all_nodes}
     
@@ -301,9 +313,6 @@ def get_benchmarks():
 
 @app.get("/api/demo/scenes")
 def get_demo_scenes():
-    """
-    Returns the 8 scenes of the 5-minute PRD demo narrative (PRD Section 36)
-    """
     return [
         {
             "scene_number": 1,
@@ -371,7 +380,51 @@ def get_demo_scenes():
         }
     ]
 
-# Mount built frontend dist static assets if available
+# --- NEW: ELLIPTIC DATASET ENDPOINTS ---
+
+@app.get("/api/elliptic-metrics")
+def get_elliptic_metrics():
+    """Returns the benchmark metrics from the offline Kaggle training"""
+    return elliptic_manager.metrics
+
+@app.post("/api/analyze-elliptic-batch")
+async def analyze_elliptic_batch(
+    nodes_file: UploadFile = File(...),
+    edges_file: UploadFile = File(...)
+):
+    """Processes dynamic transaction batches using the Elliptic GraphSAGE + XGBoost pipeline"""
+    nodes_df = pd.read_csv(io.StringIO(str(await nodes_file.read(), 'utf-8')))
+    edges_df = pd.read_csv(io.StringIO(str(await edges_file.read(), 'utf-8')))
+    
+    # Analyze topology
+    graph = EllipticTopologyEngine.build_and_analyze(edges_df)
+    
+    # Run Inference
+    predictions = elliptic_manager.predict_batch(nodes_df, graph)
+    
+    nodes_payload = []
+    for pred in predictions:
+        tx_id = pred['txId']
+        nodes_payload.append({
+            "id": tx_id,
+            "risk_score": pred['risk_score'],
+            "predicted_class": pred['predicted_class'],
+            "core_number": graph.nodes[tx_id].get('core_number', 0) if tx_id in graph else 0,
+        })
+        
+    edges_payload = [{"source": row['txId1'], "target": row['txId2']} for _, row in edges_df.iterrows()]
+    
+    return {
+        "nodes": nodes_payload,
+        "edges": edges_payload,
+        "summary": {
+            "node_count": len(nodes_payload),
+            "edge_count": len(edges_payload),
+            "high_risk_count": sum(1 for p in predictions if p['predicted_class'] == 1)
+        }
+    }
+
+# --- STATIC FILE MOUNTING ---
 frontend_dist = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..", "frontend", "dist")
 if os.path.exists(frontend_dist):
     app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist, "assets")), name="assets")
@@ -382,4 +435,3 @@ if os.path.exists(frontend_dist):
         if os.path.isfile(file_path):
             return FileResponse(file_path)
         return FileResponse(os.path.join(frontend_dist, "index.html"))
-
