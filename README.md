@@ -170,6 +170,40 @@ API:
 - `GET /api/batch/{batch_id}` retrieves one of the ten most recent results in
   the running backend process.
 
+### Deploying the frontend and backend to Vercel
+
+The root `vercel.json` defines two services:
+
+- `frontend` builds the Vite app from `frontend/` and receives public traffic
+  for `/` and all non-API paths.
+- `backend` runs the FastAPI app from `backend/` and receives public traffic
+  only for `/api/*`.
+
+The browser calls relative `/api/...` URLs, so the Vercel rewrites route those
+requests to the backend service on the same deployment domain. There is no
+server-side frontend-to-backend request and therefore no service binding is
+needed. The `127.0.0.1:8000` proxy in `frontend/vite.config.js` is for the
+local Vite development server only; it is not used for production requests.
+
+For local multi-service testing, use the Vercel CLI from the repository root:
+
+```bash
+vercel dev
+```
+
+Elliptic batch inference requires `graphsage.pt`, `pcc_xgb_model.json`,
+`elliptic_embeddings.csv`, and `metrics.json`. These files are intentionally
+excluded from Git, so they must be provisioned for the backend deployment
+separately and `ECG_ARTIFACTS_DIR` configured if they are not placed in the
+backend's default artifact directory. Without them, the general dashboard APIs
+can still serve, but Elliptic metrics and batch inference are unavailable.
+The backend also depends on PyTorch and Torch Geometric, and the local
+embedding CSV is approximately 137 MB. The Vercel service configuration enables
+an attempted deployment, but function packaging/runtime compatibility for
+these dependencies and artifact provisioning have not been verified; a
+successful frontend build alone does not establish that the backend will
+deploy or that batch inference will be available.
+
 ---
 
 ## 🏆 5-Minute PRD Demo Tour
